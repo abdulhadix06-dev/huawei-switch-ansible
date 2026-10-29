@@ -1,0 +1,5 @@
+inventory.ini
+*.vault
+.env
+*.log
+__pycache__/

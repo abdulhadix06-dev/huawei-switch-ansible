@@ -1,0 +1,52 @@
+# VLAN CREATE - Huawei switches (Semaphore task template)
+#
+# What it does: creates a VLAN and gives it a description.
+# If access_port is also given, it makes that port an access port
+# in the new VLAN.
+#
+# Semaphore use: Task Templates -> New template -> Playbook: vlan-create.yml
+# Extra variables (JSON) at run time:
+#   VLAN only:        { "vlan_id": 150, "vlan_name": "Printers" }
+#   VLAN + port:      { "vlan_id": 150, "vlan_name": "Printers", "access_port": "GigabitEthernet0/0/12" }
+#
+# NOTE: do not use spaces in vlan_name (use Sales_Team, not Sales Team).
+# Test first on ONE switch with a test VLAN.
+---
+- name: VLAN create
+  hosts: huawei_switches
+  gather_facts: no
+
+  tasks:
+    - name: Check that vlan_id was given
+      assert:
+        that:
+          - vlan_id is defined
+        fail_msg: "Pass vlan_id as an extra variable (for example 150)."
+
+    - name: Create the VLAN and set its description
+      community.network.ce_config:
+        lines:
+          - "description {{ vlan_name | default('VLAN-' ~ vlan_id) }}"
+        parents: "vlan {{ vlan_id }}"
+      register: vlan_result
+
+    - name: Put the port in the VLAN (if access_port was given)
+      community.network.ce_config:
+        lines:
+          - port link-type access
+          - "port default vlan {{ vlan_id }}"
+        parents: "interface {{ access_port }}"
+      register: port_vlan_result
+      when: access_port is defined
+
+    - name: Show the result
+      debug:
+        msg: "{{ inventory_hostname }} ({{ ansible_host }}): VLAN {{ vlan_id }} ({{ vlan_name | default('no name') }}) is ready"
+
+    - name: Save config (only where changed)
+      community.network.ce_command:
+        commands:
+          - command: save
+            prompt: "Are you sure to continue"
+            answer: "y"
+      when: save_config | default(true) | bool and (vlan_result.changed or (port_vlan_result is defined and port_vlan_result.changed))

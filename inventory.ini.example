@@ -1,0 +1,17 @@
+# EXAMPLE INVENTORY ONLY - do not use as-is, and do not commit a real inventory.
+# Copy this file to inventory.ini, then replace the example hostnames,
+# example IPs and example username with your own switches.
+# The 192.0.2.x addresses below are documentation-only addresses, not real switches.
+# Do NOT put a real password in this file. Use a prompt, an SSH key, or Ansible Vault.
+
+[huawei_switches]
+sw-example-01 ansible_host=192.0.2.11
+sw-example-02 ansible_host=192.0.2.12
+
+[huawei_switches:vars]
+ansible_network_os=community.network.ce
+ansible_connection=network_cli
+ansible_port=2022
+ansible_user=switch_admin
+# If your switches use SSH port 22, change ansible_port above to 22.
+# If you use an SSH key, add: ansible_ssh_private_key_file=/path/to/your/key

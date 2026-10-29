@@ -1,0 +1,56 @@
+# BULK config push - Huawei switches (Semaphore task template)
+#
+# What it does: applies the given config lines to all switches in
+# the inventory, then saves the config only where it changed.
+# Use it when the same small change is needed on several switches,
+# instead of logging in to each switch one by one.
+#
+# Semaphore use: Task Templates -> New template -> Playbook: config-push.yml
+# Extra variables (JSON) at run time, for an interface-level change:
+#    {
+#      "config_parents": "interface GigabitEthernet0/0/10",
+#      "config_lines": ["description UPLINK-TO-CORE", "port link-type trunk", "port trunk allow-pass vlan 10 20"],
+#      "save_config": true
+#    }
+# For system-view level commands, leave out config_parents:
+#    {
+#      "config_lines": ["snmp-agent sys-info location Test-Location"],
+#      "save_config": true
+#    }
+#
+# NOTE: test first on ONE switch, or with save_config set to false.
+---
+- name: Push config lines to all Huawei devices
+  hosts: huawei_switches
+  gather_facts: no
+
+  tasks:
+    - name: Check that config_lines were given
+      assert:
+        that:
+          - config_lines is defined
+          - config_lines | length > 0
+        fail_msg: "Pass config_lines as a list in extra variables."
+
+    - name: Apply the config lines
+      community.network.ce_config:
+        lines: "{{ [config_lines] if config_lines is string else config_lines }}"
+        parents: "{{ config_parents | default(omit, true) }}"
+      register: push_result
+
+    - name: Show each switch result
+      debug:
+        msg: "{{ inventory_hostname }} ({{ ansible_host }}): {{ 'CHANGED - config applied' if push_result.changed else 'OK - already applied' }}"
+
+    - name: Save config (only where changed)
+      community.network.ce_command:
+        commands:
+          - command: save
+            prompt: "Are you sure to continue"
+            answer: "y"
+      when: save_config | default(true) | bool and push_result.changed
+
+    - name: Show the save result
+      debug:
+        msg: "{{ inventory_hostname }}: config saved"
+      when: save_config | default(true) | bool and push_result.changed

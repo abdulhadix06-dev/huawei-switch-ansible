@@ -1,0 +1,42 @@
+# Port SHUT / UNSHUT - Huawei switches (Semaphore task template)
+#
+# What it does: shuts down or brings up the given port, then saves
+# the config only if it changed.
+#
+# Semaphore use: Task Templates -> New template -> Playbook: port-admin.yml
+# Extra variables (JSON) at run time:
+#   Shut a port down:  { "target_port": "GigabitEthernet0/0/5", "port_action": "shutdown" }
+#   Bring a port up:   { "target_port": "GigabitEthernet0/0/5", "port_action": "unshutdown" }
+#
+# NOTE: test first on ONE switch and on an empty port.
+---
+- name: Port shut / unshut
+  hosts: huawei_switches
+  gather_facts: no
+
+  tasks:
+    - name: Check that values were given
+      assert:
+        that:
+          - target_port is defined
+          - port_action in ["shutdown", "unshutdown"]
+        fail_msg: "Pass target_port and port_action (shutdown or unshutdown) as extra variables."
+
+    - name: Change the port state
+      community.network.ce_config:
+        lines:
+          - "{{ 'shutdown' if port_action == 'shutdown' else 'undo shutdown' }}"
+        parents: "interface {{ target_port }}"
+      register: port_result
+
+    - name: Show the result
+      debug:
+        msg: "{{ inventory_hostname }} ({{ ansible_host }}): port {{ target_port }} -> {{ 'shutdown' if port_action == 'shutdown' else 'up' }}"
+
+    - name: Save config (only where changed)
+      community.network.ce_command:
+        commands:
+          - command: save
+            prompt: "Are you sure to continue"
+            answer: "y"
+      when: save_config | default(true) | bool and port_result.changed

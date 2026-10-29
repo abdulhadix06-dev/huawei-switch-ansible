@@ -1,0 +1,49 @@
+# USER CREATE - local SSH user on Huawei switches (Semaphore task template)
+#
+# What it does: creates a local user in AAA view, with a privilege
+# level and SSH service type, then saves the config.
+#
+# Semaphore use: Task Templates -> New template -> Playbook: user-create.yml
+# Extra variables (JSON) at run time:
+#   { "new_username": "newuser", "priv_level": 15 }
+#   Pass new_password at run time too, from a prompt or Vault.
+#   Do NOT write a real password in this file or in a task template.
+#   Default priv_level is 15. Use 3 for a read-only user.
+#
+# NOTE: the password can appear in Semaphore task history, so delete
+# that task run after the work is done. Re-running will usually
+# report CHANGED, because the switch stores passwords as a hash and
+# cannot compare them. That is normal.
+---
+- name: SSH user create
+  hosts: huawei_switches
+  gather_facts: no
+
+  tasks:
+    - name: Check that username and password were given
+      assert:
+        that:
+          - new_username is defined
+          - new_password is defined
+        fail_msg: "Pass new_username and new_password as extra variables."
+
+    - name: Create the user in AAA
+      community.network.ce_config:
+        lines:
+          - "local-user {{ new_username }} password irreversible-cipher {{ new_password }}"
+          - "local-user {{ new_username }} privilege level {{ priv_level | default(15) }}"
+          - "local-user {{ new_username }} service-type ssh"
+        parents: aaa
+      register: user_result
+
+    - name: Show the result
+      debug:
+        msg: "{{ inventory_hostname }} ({{ ansible_host }}): user '{{ new_username }}' created (privilege {{ priv_level | default(15) }}, SSH)"
+
+    - name: Save config
+      community.network.ce_command:
+        commands:
+          - command: save
+            prompt: "Are you sure to continue"
+            answer: "y"
+      when: save_config | default(true) | bool
